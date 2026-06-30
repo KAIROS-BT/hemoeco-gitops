@@ -1,0 +1,25 @@
+# macOS
+.DS_Store
+
+# Archivos fuera del alcance del repo (solo locales)
+cpu_utilization.py
+pull_reservation_prices.py
+files/
+files.zip
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+crash.log
+tfplan
+*.tfplan
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Entornos / secretos locales
+*.env
+.env

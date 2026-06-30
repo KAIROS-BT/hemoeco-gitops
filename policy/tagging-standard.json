@@ -1,0 +1,7 @@
+{
+  "requiredTags": {
+    "workload": { "type": "string", "minLength": 2 },
+    "ambiente": { "type": "enum", "allowed": ["prod", "dev", "test"] },
+    "owner":    { "type": "string", "minLength": 2 }
+  }
+}

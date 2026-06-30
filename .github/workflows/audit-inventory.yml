@@ -1,0 +1,22 @@
+name: audit-inventory
+on:
+  schedule:
+    - cron: '0 13 * * 1'   # lunes 13:00 UTC
+  workflow_dispatch:
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Extension Resource Graph
+        run: az extension add --name resource-graph -y
+      - name: Auditar cobertura de etiquetas
+        run: python3 scripts/audit_coverage.py >> "$GITHUB_STEP_SUMMARY"

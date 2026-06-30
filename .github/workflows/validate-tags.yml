@@ -1,0 +1,24 @@
+name: validate-tags
+on:
+  pull_request:
+    paths: ['infra/**', 'policy/**', 'scripts/**']
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+      - name: Formato
+        working-directory: infra
+        run: terraform fmt -check -recursive
+      - name: Sintaxis (sin backend)
+        working-directory: infra
+        run: |
+          terraform init -backend=false
+          terraform validate
+      - name: Validar etiquetas (gate)
+        run: python3 scripts/validate_tags.py infra/tags.auto.tfvars.json policy/tagging-standard.json
