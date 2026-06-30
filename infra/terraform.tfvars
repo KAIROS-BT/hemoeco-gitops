@@ -1,3 +1,3 @@
-resource_group_name = "rg-hemoecocloud-shared-001"
+resource_group_name = "rg-kaione"
 location            = "westus"
-storage_name        = "sthemoecogovdemo01"
+storage_name        = "stkaionegovdemo01"

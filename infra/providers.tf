@@ -8,8 +8,13 @@ terraform {
     }
   }
 
-  # Configurado en CI con -backend-config (ver workflow deploy.yml)
-  backend "azurerm" {}
+  # Configurado en CI con -backend-config (ver workflow deploy.yml).
+  # Auth al state por OIDC + Azure AD (la identidad federada tiene
+  # "Storage Blob Data Contributor" sobre el storage account; no usa access key).
+  backend "azurerm" {
+    use_oidc         = true
+    use_azuread_auth = true
+  }
 }
 
 provider "azurerm" {
