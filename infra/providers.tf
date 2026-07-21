@@ -20,4 +20,10 @@ terraform {
 provider "azurerm" {
   features {}
   use_oidc = true
+
+  # El SP tiene Contributor solo sobre el RG objetivo (minimo privilegio) y no
+  # puede registrar resource providers a nivel suscripcion (requiere .../register/action).
+  # Desactivamos el auto-registro; Microsoft.Storage ya esta registrado en la suscripcion.
+  # Si agregas recursos de otro RP, registralo antes como Owner: az provider register --namespace <RP>.
+  resource_provider_registrations = "none"
 }
