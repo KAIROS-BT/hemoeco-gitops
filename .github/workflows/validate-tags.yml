@@ -21,4 +21,4 @@ jobs:
           terraform init -backend=false
           terraform validate
       - name: Validar etiquetas (gate)
-        run: python3 scripts/validate_tags.py infra/tags.auto.tfvars.json policy/tagging-standard.json
+        run: python3 scripts/validate_tags.py infra/tags.auto.tfvars.json policy/tagging-standard.json >> "$GITHUB_STEP_SUMMARY"

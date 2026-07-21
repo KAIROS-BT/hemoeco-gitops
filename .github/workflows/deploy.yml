@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Validar etiquetas (gate)
-        run: python3 scripts/validate_tags.py infra/tags.auto.tfvars.json policy/tagging-standard.json
+        run: python3 scripts/validate_tags.py infra/tags.auto.tfvars.json policy/tagging-standard.json >> "$GITHUB_STEP_SUMMARY"
 
   deploy:
     needs: gate
@@ -39,6 +39,14 @@ jobs:
             -backend-config="container_name=${{ vars.TFSTATE_CONTAINER }}" \
             -backend-config="key=hemoeco-gitops.tfstate"
       - name: Plan
-        run: terraform plan -out tfplan
+        run: terraform plan -no-color -out tfplan | tee plan.txt
       - name: Apply
         run: terraform apply -auto-approve tfplan
+      - name: Reporte de despliegue
+        if: always()
+        env:
+          GH_SHA: ${{ github.sha }}
+          GH_ACTOR: ${{ github.actor }}
+        run: |
+          terraform output -json > tf-outputs.json 2>/dev/null || echo '{}' > tf-outputs.json
+          python3 ../scripts/deploy_report.py plan.txt tf-outputs.json >> "$GITHUB_STEP_SUMMARY"
