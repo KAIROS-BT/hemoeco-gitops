@@ -36,27 +36,39 @@ Todo en Cloud Shell. Re-deriva las variables al inicio de cada sesion.
 ### 0. Variables
 
 ```bash
-SUB="6b2cf929-f0d7-4d7d-91e6-c79622ac195d"
-TENANT=$(az account show --query tenantId -o tsv)
-GH_ORG="<tu-org>"
-GH_REPO="<tu-repo>"
+GH_ORG="KAIROS-BT"
+GH_REPO="hemoeco-gitops"
 APP_NAME="hemoeco-gitops"
-LOCATION="westus"
-TARGET_RG="rg-hemoecocloud-shared-001"
-STATE_RG="rg-tfstate-001"
-STATE_SA="sthemoecotfstate$RANDOM"   # nombre global unico
+TARGET_RG="rg-kaione"
+LOCATION="eastus"
 STATE_CONTAINER="tfstate"
+
+# NO hardcodees el ID de suscripcion: descubri el real buscando donde vive
+# el RG objetivo. (Apuntar a un SUB inexistente da "la suscripcion no existe"
+# al crear roles, aunque seas Owner.)
+SUB=""
+for s in $(az account list --query "[?state=='Enabled'].id" -o tsv); do
+  if az group show -n "$TARGET_RG" --subscription "$s" -o none 2>/dev/null; then SUB="$s"; break; fi
+done
 az account set --subscription "$SUB"
+TENANT=$(az account show --query tenantId -o tsv)
+
+# El estado de Terraform vive en el mismo RG objetivo; nombre global unico:
+STATE_RG="$TARGET_RG"
+STATE_SA="sttfstatekaione$RANDOM"
+echo "SUB=$SUB TENANT=$TENANT STATE_SA=$STATE_SA"
 ```
 
 ### 1. Backend remoto para el estado de Terraform
 
 ```bash
-az group create -n "$STATE_RG" -l "$LOCATION"
+# El RG objetivo ya existe; creamos el storage del estado dentro de el.
 az storage account create -n "$STATE_SA" -g "$STATE_RG" -l "$LOCATION" \
   --sku Standard_LRS --min-tls-version TLS1_2 --allow-blob-public-access false
+# Container via account key: evita el 403 por propagacion de RBAC de plano de datos.
+KEY=$(az storage account keys list -g "$STATE_RG" -n "$STATE_SA" --query "[0].value" -o tsv)
 az storage container create -n "$STATE_CONTAINER" \
-  --account-name "$STATE_SA" --auth-mode login
+  --account-name "$STATE_SA" --account-key "$KEY"
 ```
 
 ### 2. Identidad federada (sin client secret)
@@ -116,6 +128,11 @@ gh variable set TFSTATE_CONTAINER    --body "$STATE_CONTAINER" -R "$GH_ORG/$GH_R
 ```
 
 ### 6. Environment con aprobacion + branch protection
+
+> Nota: en repos **privados**, tanto la branch protection como la aprobacion
+> del environment requieren GitHub Pro/Team (o hacer el repo publico). Sin eso,
+> el check `validate` igual corre y se ve verde/rojo en cada PR, pero no se puede
+> *forzar* como bloqueo de merge ni exigir aprobacion manual del deploy.
 
 ```bash
 # Environment prod (agrega reviewers en la UI: Settings > Environments > prod)
