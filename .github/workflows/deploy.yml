@@ -31,7 +31,7 @@ jobs:
     name: Gate de etiquetas
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Validar etiquetas (gate)
         run: python3 scripts/validate_tags.py infra/tags.auto.tfvars.json policy/tagging-standard.json >> "$GITHUB_STEP_SUMMARY"
 
@@ -120,7 +120,7 @@ jobs:
       TF_VAR_location: ${{ vars.AZURE_LOCATION }}
       TF_VAR_storage_name: ${{ vars.STORAGE_ACCOUNT_NAME }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.9.8"
