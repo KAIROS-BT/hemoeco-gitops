@@ -1,13 +1,80 @@
 name: audit-inventory
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CONEXION A AZURE DESACTIVADA POR DEFECTO
+#
+# Se quito el trigger `schedule` (corria cada lunes) para que un fork no consulte
+# ninguna suscripcion sin que lo pidas. Requiere, igual que `deploy`:
+#   1. Lanzarlo a mano:  Actions > audit-inventory > Run workflow
+#   2. La variable de repositorio  ENABLE_AZURE = true
+#
+# Para restaurar la auditoria semanal, descomenta el bloque `schedule` de abajo.
+# ─────────────────────────────────────────────────────────────────────────────
 on:
-  schedule:
-    - cron: '0 13 * * 1'   # lunes 13:00 UTC
   workflow_dispatch:
+  # schedule:
+  #   - cron: '0 13 * * 1'   # lunes 13:00 UTC
+
 permissions:
   id-token: write
   contents: read
+
 jobs:
+  preflight:
+    name: Comprobar configuracion de Azure
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    steps:
+      - name: Verificar secrets y variables
+        id: check
+        env:
+          ENABLE_AZURE: ${{ vars.ENABLE_AZURE }}
+          HAS_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID != '' }}
+          HAS_TENANT_ID: ${{ secrets.AZURE_TENANT_ID != '' }}
+          HAS_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID != '' }}
+        run: |
+          {
+            echo "## 🔌 Estado de la conexion a Azure"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$ENABLE_AZURE" != "true" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "**Auditoria desactivada.** La variable de repositorio \`ENABLE_AZURE\` no vale \`true\`."
+              echo
+              echo '```bash'
+              echo 'gh variable set ENABLE_AZURE --body true'
+              echo '```'
+              echo
+              echo "Ver README > \"Activar el despliegue\"."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          faltan=()
+          [ "$HAS_CLIENT_ID" = "true" ]       || faltan+=("secret AZURE_CLIENT_ID")
+          [ "$HAS_TENANT_ID" = "true" ]       || faltan+=("secret AZURE_TENANT_ID")
+          [ "$HAS_SUBSCRIPTION_ID" = "true" ] || faltan+=("secret AZURE_SUBSCRIPTION_ID")
+
+          if [ ${#faltan[@]} -gt 0 ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "**Configuracion incompleta.** Falta:"
+              echo
+              for f in "${faltan[@]}"; do echo "- \`$f\`"; done
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+          echo "**Conexion habilitada.** Se procede con la auditoria de inventario." >> "$GITHUB_STEP_SUMMARY"
+
   audit:
+    name: Auditar cobertura de etiquetas
+    needs: preflight
+    if: needs.preflight.outputs.enabled == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

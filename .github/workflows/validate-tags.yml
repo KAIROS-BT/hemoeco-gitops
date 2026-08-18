@@ -1,11 +1,19 @@
 name: validate-tags
+
+# Este workflow NO se conecta a Azure: solo valida formato, sintaxis de Terraform
+# y el cumplimiento del estandar de etiquetado. Por eso sigue corriendo en cada
+# Pull Request sin ninguna configuracion previa — funciona en un fork recien hecho.
 on:
   pull_request:
     paths: ['infra/**', 'policy/**', 'scripts/**']
+  workflow_dispatch:
+
 permissions:
   contents: read
+
 jobs:
   validate:
+    name: Validar etiquetas y sintaxis
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

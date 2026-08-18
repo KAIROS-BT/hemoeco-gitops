@@ -1,11 +1,10 @@
 # macOS
 .DS_Store
 
-# Archivos fuera del alcance del repo (solo locales)
-cpu_utilization.py
-pull_reservation_prices.py
-files/
-files.zip
+# Herramientas locales del desarrollador
+.claude/
+.vscode/
+.idea/
 
 # Terraform
 .terraform/
@@ -20,6 +19,21 @@ override.tf.json
 *_override.tf
 *_override.tf.json
 
+# Configuracion propia del entorno (NO versionar: describe tu suscripcion).
+# `tags.auto.tfvars.json` SI se versiona: es el objetivo del gate de gobernanza.
+infra/terraform.tfvars
+*.auto.tfvars
+!infra/tags.auto.tfvars.json
+
+# Artefactos generados por los workflows
+plan.txt
+tf-outputs.json
+
 # Entornos / secretos locales
 *.env
 .env
+.env.*
+*.pem
+*.key
+credentials.json
+azure-credentials.json
