@@ -1,34 +1,127 @@
 name: deploy
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CONEXION A AZURE DESACTIVADA POR DEFECTO
+#
+# Este workflow NO se dispara solo. Se quito el trigger `push` a `main` para que
+# un fork recien clonado no intente autenticarse ni desplegar en ninguna
+# suscripcion. Para ejecutarlo hacen falta DOS cosas:
+#
+#   1. Lanzarlo a mano:  Actions > deploy > Run workflow
+#   2. La variable de repositorio  ENABLE_AZURE = true
+#
+# El job `gate` (validacion de etiquetas) no toca Azure y corre siempre.
+# Ver README > "Activar el despliegue" para el procedimiento completo.
+# ─────────────────────────────────────────────────────────────────────────────
 on:
-  push:
-    branches: [main]
-    paths: ['infra/**']
+  workflow_dispatch:
+
 permissions:
   id-token: write
   contents: read
+
 env:
   ARM_USE_OIDC: "true"
   ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
   ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
   ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
 jobs:
   gate:
+    name: Gate de etiquetas
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Validar etiquetas (gate)
         run: python3 scripts/validate_tags.py infra/tags.auto.tfvars.json policy/tagging-standard.json >> "$GITHUB_STEP_SUMMARY"
 
-  deploy:
+  preflight:
+    name: Comprobar configuracion de Azure
     needs: gate
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    steps:
+      - name: Verificar secrets y variables
+        id: check
+        env:
+          ENABLE_AZURE: ${{ vars.ENABLE_AZURE }}
+          HAS_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID != '' }}
+          HAS_TENANT_ID: ${{ secrets.AZURE_TENANT_ID != '' }}
+          HAS_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID != '' }}
+          TFSTATE_RG: ${{ vars.TFSTATE_RG }}
+          TFSTATE_SA: ${{ vars.TFSTATE_SA }}
+          TFSTATE_CONTAINER: ${{ vars.TFSTATE_CONTAINER }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+          STORAGE_ACCOUNT_NAME: ${{ vars.STORAGE_ACCOUNT_NAME }}
+        run: |
+          faltan=()
+          [ "$HAS_CLIENT_ID" = "true" ]       || faltan+=("secret AZURE_CLIENT_ID")
+          [ "$HAS_TENANT_ID" = "true" ]       || faltan+=("secret AZURE_TENANT_ID")
+          [ "$HAS_SUBSCRIPTION_ID" = "true" ] || faltan+=("secret AZURE_SUBSCRIPTION_ID")
+          [ -n "$TFSTATE_RG" ]                || faltan+=("variable TFSTATE_RG")
+          [ -n "$TFSTATE_SA" ]                || faltan+=("variable TFSTATE_SA")
+          [ -n "$TFSTATE_CONTAINER" ]         || faltan+=("variable TFSTATE_CONTAINER")
+          [ -n "$AZURE_RESOURCE_GROUP" ]      || faltan+=("variable AZURE_RESOURCE_GROUP")
+          [ -n "$AZURE_LOCATION" ]            || faltan+=("variable AZURE_LOCATION")
+          [ -n "$STORAGE_ACCOUNT_NAME" ]      || faltan+=("variable STORAGE_ACCOUNT_NAME")
+
+          {
+            echo "## 🔌 Estado de la conexion a Azure"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$ENABLE_AZURE" != "true" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "**Despliegue desactivado.** La variable de repositorio \`ENABLE_AZURE\` no vale \`true\`."
+              echo
+              echo "El gate de etiquetas si se ejecuto. Para habilitar el despliegue:"
+              echo
+              echo '```bash'
+              echo 'gh variable set ENABLE_AZURE --body true'
+              echo '```'
+              echo
+              echo "Antes de activarlo, completa los pasos del README (identidad federada,"
+              echo "backend remoto, secrets y variables del repositorio)."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if [ ${#faltan[@]} -gt 0 ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "**Configuracion incompleta.** \`ENABLE_AZURE=true\` pero falta configurar:"
+              echo
+              for f in "${faltan[@]}"; do echo "- \`$f\`"; done
+              echo
+              echo "Ver README > \"Conectar tu suscripcion de Azure\"."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+          echo "**Conexion habilitada.** Secrets y variables presentes; se procede al despliegue." >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: Terraform plan y apply
+    needs: preflight
+    if: needs.preflight.outputs.enabled == 'true'
     runs-on: ubuntu-latest
     environment: prod   # exige aprobacion manual si la configuras en el repo
     defaults:
       run:
         working-directory: infra
+    env:
+      # `infra/terraform.tfvars` no se versiona (describe tu entorno). En CI los
+      # valores llegan por variables del repositorio via TF_VAR_*.
+      TF_VAR_resource_group_name: ${{ vars.AZURE_RESOURCE_GROUP }}
+      TF_VAR_location: ${{ vars.AZURE_LOCATION }}
+      TF_VAR_storage_name: ${{ vars.STORAGE_ACCOUNT_NAME }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: "1.9.8"
       - name: Init
@@ -37,9 +130,11 @@ jobs:
             -backend-config="resource_group_name=${{ vars.TFSTATE_RG }}" \
             -backend-config="storage_account_name=${{ vars.TFSTATE_SA }}" \
             -backend-config="container_name=${{ vars.TFSTATE_CONTAINER }}" \
-            -backend-config="key=hemoeco-gitops.tfstate"
+            -backend-config="key=${{ vars.TFSTATE_KEY || 'hemoeco-gitops.tfstate' }}"
       - name: Plan
-        run: terraform plan -no-color -out tfplan | tee plan.txt
+        run: |
+          set -o pipefail   # sin esto el exit code seria el de `tee`, no el de terraform
+          terraform plan -no-color -out tfplan | tee plan.txt
       - name: Apply
         run: terraform apply -auto-approve tfplan
       - name: Reporte de despliegue

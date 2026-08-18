@@ -1,0 +1,16 @@
+# Copia este archivo a `terraform.tfvars` y reemplaza los valores por los tuyos.
+#   cp infra/terraform.tfvars.example infra/terraform.tfvars
+#
+# `terraform.tfvars` esta en .gitignore a proposito: describe TU entorno, no el
+# del repositorio. Las etiquetas de gobernanza NO van aqui, van en
+# `tags.auto.tfvars.json`, que si se versiona porque es el objetivo del gate.
+
+# Grupo de recursos donde se despliega. Debe existir antes del primer apply.
+resource_group_name = "rg-cambiame"
+
+# Region de Azure. Debe coincidir con la region del grupo de recursos.
+location = "eastus"
+
+# Nombre de la cuenta de almacenamiento de ejemplo.
+# Reglas de Azure: 3-24 caracteres, solo minusculas y numeros, unico a nivel global.
+storage_name = "stcambiamegovdemo01"

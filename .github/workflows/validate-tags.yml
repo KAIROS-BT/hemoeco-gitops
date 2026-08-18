@@ -1,15 +1,28 @@
 name: validate-tags
+
+# Este workflow NO se conecta a Azure: solo valida formato, sintaxis de Terraform
+# y el cumplimiento del estandar de etiquetado. Por eso sigue corriendo en cada
+# Pull Request sin ninguna configuracion previa — funciona en un fork recien hecho.
+#
+# Sin filtro `paths` a proposito: el README configura branch protection exigiendo
+# el check `validate`, y un check requerido que no se dispara queda en "Expected —
+# waiting for status to be reported" y bloquea el merge indefinidamente. Un PR que
+# solo toque .github/, README.md o .gitignore caeria justo en ese hueco. El job
+# tarda ~13s, asi que correrlo siempre sale mas barato que el modo de fallo.
 on:
   pull_request:
-    paths: ['infra/**', 'policy/**', 'scripts/**']
+  workflow_dispatch:
+
 permissions:
   contents: read
+
 jobs:
   validate:
+    name: Validar etiquetas y sintaxis
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: "1.9.8"
       - name: Formato
