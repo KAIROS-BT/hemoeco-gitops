@@ -62,13 +62,19 @@ scripts/deploy_report.py          reporte de despliegue → Markdown
 
 | Workflow | Trigger original | Trigger en la entrega | Toca Azure |
 |---|---|---|:---:|
-| `validate-tags` | Pull Request | **Pull Request** (sin cambios) + manual | No |
+| `validate-tags` | Pull Request (con filtro `paths`) | **Todo Pull Request** + manual | No |
 | `deploy` | `push` a `main` | **Solo manual** + `ENABLE_AZURE=true` | Sí |
 | `audit-inventory` | `schedule` semanal | **Solo manual** + `ENABLE_AZURE=true` | Sí |
 
 `validate-tags` sigue activo porque **no se autentica contra Azure**: solo valida
 formato, sintaxis de Terraform y cumplimiento de etiquetas. Funciona en un fork recién
 creado, sin configurar nada. Es la parte demostrable del día uno.
+
+Se le quitó el filtro `paths` a propósito. La branch protection del paso 6 exige el
+check `validate`, y un check requerido que no llega a dispararse se queda en *Expected
+— waiting for status to be reported* y **bloquea el merge indefinidamente**: justo lo
+que pasaría en un PR que solo tocara `.github/`, `README.md` o `.gitignore`. El job
+tarda unos 13 segundos, así que correrlo siempre sale más barato que ese modo de fallo.
 
 `deploy` y `audit-inventory` necesitan **dos condiciones simultáneas**:
 
@@ -144,8 +150,8 @@ python3 scripts/validate_tags.py infra/tags.auto.tfvars.json policy/tagging-stan
 echo "exit code: $?"   # 0 = cumple, 1 = incumple
 ```
 
-Abre un Pull Request con cualquier cambio en `infra/` y verás el check `validate`
-correr solo, con su tabla de etiquetas en el resumen del job.
+Abre un Pull Request con cualquier cambio y verás el check `validate` correr solo,
+con su tabla de etiquetas en el resumen del job.
 
 ---
 
